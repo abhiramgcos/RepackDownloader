@@ -1,31 +1,38 @@
-function saveToStorage(entry) {
-  chrome.storage.session.get(['progressLog'], (data) => {
-    const log = data.progressLog || [];
-    log.push(entry);
-    chrome.storage.session.set({ progressLog: log });
-  });
+function getSession(keys) {
+  return new Promise((resolve) => chrome.storage.session.get(keys, resolve));
+}
+
+function setSession(data) {
+  return new Promise((resolve) => chrome.storage.session.set(data, resolve));
+}
+
+async function appendLog(entry) {
+  const data = await getSession(['progressLog']);
+  const log = data.progressLog || [];
+  log.push(entry);
+  await setSession({ progressLog: log });
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'download') {
     console.log('[BG] Received download request for', request.links.length, 'links');
-    chrome.storage.session.set({ progressLog: [], downloadDone: false });
+    setSession({ progressLog: [], downloadDone: false });
 
     const total = request.links.length;
-    saveToStorage({ type: 'info', text: `Queued ${total} link(s).` });
+    appendLog({ type: 'info', text: `Queued ${total} link(s).` });
 
     request.links.forEach((url, index) => {
       setTimeout(() => {
         console.log(`[BG] Opening tab for: ${url}`);
-        saveToStorage({ type: 'progress', text: `Opening ${index + 1}/${total}: ${url}` });
+        appendLog({ type: 'progress', text: `Opening ${index + 1}/${total}: ${url}` });
 
-        chrome.tabs.create({ url: url, active: true }, (tab) => {
+        chrome.tabs.create({ url: url, active: false }, (tab) => {
           console.log(`[BG] Tab ${tab.id} created, waiting for load`);
           const onUpdated = (tabId, info) => {
             if (tabId === tab.id && info.status === 'complete') {
               chrome.tabs.onUpdated.removeListener(onUpdated);
               console.log(`[BG] Tab ${tab.id} loaded, injecting script`);
-              saveToStorage({
+              appendLog({
                 type: 'progress',
                 text: `Tab ${tab.id} loaded, starting automation.`
               });
@@ -35,7 +42,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 func: waitAndClickDownload
               }).catch((err) => {
                 console.error('[BG] Script injection failed:', err);
-                saveToStorage({
+                appendLog({
                   type: 'error',
                   text: `Tab ${tab.id} injection failed: ${err.message || err}`
                 });
@@ -48,15 +55,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
 
     setTimeout(() => {
-      saveToStorage({ type: 'done', text: `All ${total} downloads queued.` });
-      chrome.storage.session.set({ downloadDone: true });
-    }, total * 5000 + 2000);
-  }
+      appendLog({ type: 'done', text: `All ${total} downloads queued.` });
+      setSession({ downloadDone: true });
+    }, total * 5000 + 3000);
 
-  if (request.action === 'getProgress') {
-    chrome.storage.session.get(['progressLog', 'downloadDone'], (data) => {
-      sendResponse({ log: data.progressLog || [], done: !!data.downloadDone });
-    });
+    sendResponse({ ok: true });
     return true;
   }
 });

@@ -3,76 +3,163 @@
 <head>
   <title>RepackDownloader - Progress</title>
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: Arial, sans-serif;
       font-size: 13px;
-      padding: 16px;
-      max-width: 640px;
+      background: #1a1a1a;
+      color: #ccc;
+      padding: 20px;
+      min-height: 100vh;
+      max-width: 720px;
     }
-    h2 { margin-bottom: 8px; }
-    #log {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      padding: 10px;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 12px;
-      min-height: 200px;
-      max-height: 500px;
-      overflow-y: auto;
-      white-space: pre-wrap;
+    h2 {
+      color: #fff;
+      font-size: 16px;
+      margin-bottom: 12px;
     }
-    .entry-progress { color: #9cdcfe; }
-    .entry-error { color: #f44747; }
-    .entry-done { color: #4ec9b0; font-weight: bold; }
-    .entry-info { color: #dcdcaa; }
     #statusBadge {
-      display: inline-block;
-      padding: 3px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 12px;
       border-radius: 12px;
-      font-size: 12px;
-      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 12px;
     }
-    .running { background: #0078D7; color: #ffffff; }
-    .done { background: #4ec9b0; color: #1e1e1e; }
+    .running { background: #0078D7; color: #fff; }
+    .done { background: #16a34a; color: #fff; }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1s infinite;
+    }
+    .done .dot { animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    #log {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-height: 240px;
+      max-height: 60vh;
+      overflow-y: auto;
+      font-family: Consolas, 'Cascadia Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .entry { display: block; }
+    .entry-progress .icon { color: #4fc3f7; }
+    .entry-error .icon { color: #ef5350; }
+    .entry-done .icon { color: #4caf50; font-weight: bold; }
+    .entry-info .icon { color: #ffd54f; }
+    .entry-progress .msg { color: #cfe8fc; }
+    .entry-error .msg { color: #ffcdd2; }
+    .entry-done .msg { color: #a5d6a7; font-weight: bold; }
+    .entry-info .msg { color: #fff9c4; }
+    #empty { color: #555; font-style: italic; }
+    #errBanner {
+      display: none;
+      background: #3b1010;
+      border: 1px solid #ef5350;
+      color: #ffcdd2;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    #clearBtn {
+      margin-top: 12px;
+      padding: 5px 16px;
+      background: #333;
+      color: #aaa;
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #clearBtn:hover { background: #444; color: #fff; }
   </style>
 </head>
 <body>
-  <h2>RepackDownloader Progress</h2>
-  <span id="statusBadge" class="running">Running...</span>
-  <div id="log">Waiting for progress...</div>
+  <h2>RepackDownloader</h2>
+  <div id="statusBadge" class="running">
+    <span class="dot"></span>
+    <span id="badgeText">Running...</span>
+  </div>
+  <div id="errBanner"></div>
+  <div id="log"><span id="empty">Waiting for progress...</span></div>
+  <button id="clearBtn">Clear log</button>
 
   <script>
     const logDiv = document.getElementById('log');
     const badge = document.getElementById('statusBadge');
-    let lastLen = 0;
+    const badgeText = document.getElementById('badgeText');
+    const errBanner = document.getElementById('errBanner');
+    const clearBtn = document.getElementById('clearBtn');
 
-    function poll() {
-      chrome.runtime.sendMessage({ action: 'getProgress' }, (resp) => {
-        if (!resp) return;
-        const log = resp.log || [];
-        const done = !!resp.done;
+    const icons = { progress: '->', error: 'X', done: 'OK', info: '.' };
 
-        if (log.length !== lastLen) {
-          lastLen = log.length;
-          logDiv.innerHTML = log.map((e) => {
-            const cls = `entry-${e.type}`;
-            const prefix = e.type === 'error' ? 'X ' : e.type === 'done' ? 'OK ' : '-> ';
-            return `<span class="${cls}">${prefix}${e.text}</span>`;
-          }).join('\n');
-          logDiv.scrollTop = logDiv.scrollHeight;
-        }
-
-        if (done) {
-          badge.textContent = 'Done';
-          badge.className = 'done';
-        } else {
-          setTimeout(poll, 800);
-        }
-      });
+    function escHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    poll();
+    function renderLog(log) {
+      if (!log || log.length === 0) {
+        logDiv.innerHTML = '<span id="empty">Waiting for progress...</span>';
+        return;
+      }
+
+      logDiv.innerHTML = log.map((e) => {
+        const icon = icons[e.type] || '.';
+        return `<span class="entry entry-${e.type}">` +
+          `<span class="icon">${icon}</span> ` +
+          `<span class="msg">${escHtml(e.text)}</span>` +
+          `</span>`;
+      }).join('\n');
+      logDiv.scrollTop = logDiv.scrollHeight;
+
+      const errors = log.filter((e) => e.type === 'error');
+      if (errors.length > 0) {
+        errBanner.style.display = 'block';
+        errBanner.textContent = `Errors: ${errors.length}. Check the log for details.`;
+      } else {
+        errBanner.style.display = 'none';
+      }
+    }
+
+    function setDone() {
+      badge.className = 'done';
+      badgeText.textContent = 'Completed';
+    }
+
+    chrome.storage.session.get(['progressLog', 'downloadDone'], (data) => {
+      renderLog(data.progressLog || []);
+      if (data.downloadDone) setDone();
+    });
+
+    chrome.storage.session.onChanged.addListener((changes) => {
+      if (changes.progressLog) {
+        renderLog(changes.progressLog.newValue || []);
+      }
+      if (changes.downloadDone?.newValue === true) {
+        setDone();
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      chrome.storage.session.set({ progressLog: [], downloadDone: false });
+      badge.className = 'running';
+      badgeText.textContent = 'Running...';
+      errBanner.style.display = 'none';
+      renderLog([]);
+    });
   </script>
 </body>
 </html>
