@@ -1,19 +1,37 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'download') {
     console.log('[BG] Received download request for', request.links.length, 'links');
+    chrome.runtime.sendMessage({
+      type: 'progress',
+      text: `Queued ${request.links.length} link(s).`
+    });
     request.links.forEach((url, index) => {
       setTimeout(() => {
         console.log(`[BG] Opening tab for: ${url}`);
+        chrome.runtime.sendMessage({
+          type: 'progress',
+          text: `Opening ${index + 1}/${request.links.length}: ${url}`
+        });
         chrome.tabs.create({ url: url, active: true }, (tab) => {
           console.log(`[BG] Tab ${tab.id} created, waiting for load`);
           const onUpdated = (tabId, info) => {
             if (tabId === tab.id && info.status === 'complete') {
               chrome.tabs.onUpdated.removeListener(onUpdated);
               console.log(`[BG] Tab ${tab.id} loaded, injecting script`);
+              chrome.runtime.sendMessage({
+                type: 'progress',
+                text: `Tab ${tab.id} loaded, starting automation.`
+              });
               chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: waitAndClickDownload
-              }).catch((err) => console.error('[BG] Script injection failed:', err));
+              }).catch((err) => {
+                console.error('[BG] Script injection failed:', err);
+                chrome.runtime.sendMessage({
+                  type: 'error',
+                  text: `Tab ${tab.id} injection failed: ${err.message || err}`
+                });
+              });
             }
           };
           chrome.tabs.onUpdated.addListener(onUpdated);
