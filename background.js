@@ -5,11 +5,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       setTimeout(() => {
         console.log(`[BG] Opening tab for: ${url}`);
         chrome.tabs.create({ url: url, active: true }, (tab) => {
-          console.log(`[BG] Tab ${tab.id} created, injecting script`);
-          chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: waitAndClickDownload
-          }).catch((err) => console.error('[BG] Script injection failed:', err));
+          console.log(`[BG] Tab ${tab.id} created, waiting for load`);
+          const onUpdated = (tabId, info) => {
+            if (tabId === tab.id && info.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(onUpdated);
+              console.log(`[BG] Tab ${tab.id} loaded, injecting script`);
+              chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: waitAndClickDownload
+              }).catch((err) => console.error('[BG] Script injection failed:', err));
+            }
+          };
+          chrome.tabs.onUpdated.addListener(onUpdated);
         });
       }, index * 5000);
     });
@@ -52,54 +59,58 @@ function waitAndClickDownload() {
     }, 500);
   }
 
+  function isVisible(el) {
+    return !!el && !!el.offsetParent;
+  }
+
   // Step 1: Click "Continue to Download"
   log('Step 1: Waiting for #method_free...');
   waitFor(() => document.querySelector('#method_free'), (btn) => {
     safeClick(btn);
     log('Step 1 done, starting 3s delay before Step 2');
 
-    // Step 2: Wait 3s for page to load, then click "Free Download"
-    setTimeout(() => {
-      log('Step 2: Looking for "Free Download" button...');
-      log('Button count on page:', document.querySelectorAll('button').length);
-      document.querySelectorAll('button').forEach((b, i) => {
-        const txt = b.textContent.trim().slice(0, 60);
-        if (txt.includes('Free') || txt.includes('Download') || txt.includes('Start')) {
-          log(`  Button ${i}: id="${b.id}" class="${b.className?.slice(0, 50)}" text="${txt}"`);
-        }
-      });
+    // Step 2: Wait for "Free Download"
+    log('Step 2: Looking for "Free Download" button...');
+    log('Button-like count on page:', document.querySelectorAll('button, a, [role="button"]').length);
+    document.querySelectorAll('button, a, [role="button"]').forEach((b, i) => {
+      const txt = (b.innerText || b.textContent || '').trim().slice(0, 60);
+      if (txt.includes('Free') || txt.includes('Download') || txt.includes('Start')) {
+        log(`  Candidate ${i}: tag="${b.tagName}" id="${b.id}" class="${b.className?.slice(0, 50)}" text="${txt}"`);
+      }
+    });
 
+    waitFor(() => {
+      const buttons = document.querySelectorAll('button, a, [role="button"]');
+      for (const b of buttons) {
+        if (!isVisible(b)) continue;
+        const text = (b.innerText || b.textContent || '').trim();
+        if (text.startsWith('Free Download')) {
+          return b;
+        }
+      }
+      return null;
+    }, (btn2) => {
+      log('Step 2: Found "Free Download" button');
+      safeClick(btn2);
+      log('Step 2 done');
+
+      // Step 3: Wait for "Start Download"
+      log('Step 3: Waiting for "Start Download"...');
       waitFor(() => {
-        const buttons = document.querySelectorAll('button');
+        const buttons = document.querySelectorAll('button, a, [role="button"]');
         for (const b of buttons) {
-          const span = b.querySelector('span');
-          if (span && span.textContent.trim().startsWith('Free Download')) {
+          if (!isVisible(b)) continue;
+          const text = (b.innerText || b.textContent || '').trim();
+          if (text.startsWith('Start Download')) {
             return b;
           }
         }
         return null;
-      }, (btn2) => {
-        log('Step 2: Found "Free Download" button');
-        safeClick(btn2);
-        log('Step 2 done');
-
-        // Step 3: Wait for "Start Download"
-        log('Step 3: Waiting for "Start Download"...');
-        waitFor(() => {
-          const buttons = document.querySelectorAll('button');
-          for (const b of buttons) {
-            const span = b.querySelector('span');
-            if (span && span.textContent.trim().startsWith('Start Download')) {
-              return b;
-            }
-          }
-          return null;
-        }, (btn3) => {
-          log('Step 3: Found "Start Download" button');
-          safeClick(btn3);
-          log('All steps complete!');
-        }, 1000);
-      });
-    }, 3000);
+      }, (btn3) => {
+        log('Step 3: Found "Start Download" button');
+        safeClick(btn3);
+        log('All steps complete!');
+      }, 1000);
+    }, 1500);
   });
 }
