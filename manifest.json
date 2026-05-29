@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Link Downloader",
+  "version": "1.0",
+  "description": "Downloads all archive links found inside paragraph tags.",
+  "permissions": ["activeTab", "scripting", "downloads", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
