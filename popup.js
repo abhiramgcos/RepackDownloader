@@ -5,8 +5,6 @@ const statusDiv = document.getElementById('status');
 const countSpan = document.getElementById('count');
 const selectAllRow = document.getElementById('selectAllRow');
 const selectAllCb = document.getElementById('selectAll');
-const progressDiv = document.getElementById('progress');
-const errorsDiv = document.getElementById('errors');
 
 let groups = []; // [{ label, links: string[] }]
 
@@ -125,13 +123,8 @@ downloadBtn.addEventListener('click', () => {
     selected.push(groups[gi].links[li]);
   });
   chrome.runtime.sendMessage({ action: 'download', links: selected });
-  statusDiv.textContent = `Starting ${selected.length} downloads...`;
-  progressDiv.textContent = '';
-  errorsDiv.textContent = '';
-  progressDiv.style.display = 'block';
-  errorsDiv.style.display = 'none';
-  linkListDiv.style.display = 'none';
-  actionsDiv.style.display = 'none';
+  chrome.tabs.create({ url: chrome.runtime.getURL('status.html'), active: true });
+  window.close();
 });
 
 function extractGroups() {
@@ -148,22 +141,3 @@ function extractGroups() {
   return groups;
 }
 
-function appendProgress(line) {
-  const text = progressDiv.textContent ? `${progressDiv.textContent}\n${line}` : line;
-  progressDiv.textContent = text;
-}
-
-function appendError(line) {
-  const text = errorsDiv.textContent ? `${errorsDiv.textContent}\n${line}` : line;
-  errorsDiv.textContent = text;
-  errorsDiv.style.display = 'block';
-}
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'progress') {
-    appendProgress(message.text);
-  }
-  if (message?.type === 'error') {
-    appendError(message.text);
-  }
-});

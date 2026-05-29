@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RepackDownloader - Progress</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      padding: 16px;
+      max-width: 640px;
+    }
+    h2 { margin-bottom: 8px; }
+    #log {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 10px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      min-height: 200px;
+      max-height: 500px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .entry-progress { color: #9cdcfe; }
+    .entry-error { color: #f44747; }
+    .entry-done { color: #4ec9b0; font-weight: bold; }
+    .entry-info { color: #dcdcaa; }
+    #statusBadge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .running { background: #0078D7; color: #ffffff; }
+    .done { background: #4ec9b0; color: #1e1e1e; }
+  </style>
+</head>
+<body>
+  <h2>RepackDownloader Progress</h2>
+  <span id="statusBadge" class="running">Running...</span>
+  <div id="log">Waiting for progress...</div>
+
+  <script>
+    const logDiv = document.getElementById('log');
+    const badge = document.getElementById('statusBadge');
+    let lastLen = 0;
+
+    function poll() {
+      chrome.runtime.sendMessage({ action: 'getProgress' }, (resp) => {
+        if (!resp) return;
+        const log = resp.log || [];
+        const done = !!resp.done;
+
+        if (log.length !== lastLen) {
+          lastLen = log.length;
+          logDiv.innerHTML = log.map((e) => {
+            const cls = `entry-${e.type}`;
+            const prefix = e.type === 'error' ? 'X ' : e.type === 'done' ? 'OK ' : '-> ';
+            return `<span class="${cls}">${prefix}${e.text}</span>`;
+          }).join('\n');
+          logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        if (done) {
+          badge.textContent = 'Done';
+          badge.className = 'done';
+        } else {
+          setTimeout(poll, 800);
+        }
+      });
+    }
+
+    poll();
+  </script>
+</body>
+</html>

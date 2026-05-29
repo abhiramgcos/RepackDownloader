@@ -3,12 +3,18 @@
   "name": "Link Downloader",
   "version": "1.0",
   "description": "Downloads all archive links found inside paragraph tags.",
-  "permissions": ["activeTab", "scripting", "downloads", "tabs"],
+  "permissions": ["activeTab", "scripting", "downloads", "tabs", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["status.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
